@@ -12,19 +12,20 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+import httpx
 import streamlit as st
-from groq import Groq
 
 from src.agent_tools import AgentTools
 from src.ml.ml_predictor import MLPredictor
 
+# Groq HTTP endpoint (OpenAI-compatible)
+GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+# Load API key from Streamlit secrets or env
 if "GROQ_API_KEY" in st.secrets:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 else:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-
 
 
 class InventoryAIAgent:
@@ -46,9 +47,9 @@ class InventoryAIAgent:
         if not GROQ_API_KEY:
             st.error("❌ GROQ_API_KEY is missing. Please add it in Streamlit Secrets.")
             raise ValueError("GROQ_API_KEY missing.")
-        
-        self.client = Groq(api_key=GROQ_API_KEY)
 
+        # Raw httpx client – no proxies argument anywhere
+        self.http_client = httpx.Client(timeout=30.0)
 
         # ML + classical logic tools
         self.tools = AgentTools(df_sales, inventory_df)
@@ -56,9 +57,12 @@ class InventoryAIAgent:
 
         # Conversation memory
         self.memory = []
-        self.last_item_mentioned = None      # store last used item
-        self.last_forecast = {}              # store last forecast DF
-        self.last_inventory_lookup = None    # optional
+        self.last_item_mentioned = None
+        self.last_forecast = {}
+        self.last_inventory_lookup = None
+
+        # Debug log
+        print("✅ InventoryAIAgent initialized. GROQ_API_KEY present:", bool(GROQ_API_KEY))
 
     # ========================================================
     # JSON SAFE SERIALIZER
@@ -79,20 +83,39 @@ class InventoryAIAgent:
         return obj
 
     # ========================================================
-    # INTERNAL: LLM CALL (Groq)
+    # INTERNAL: LLM CALL (Groq via HTTP)
     # ========================================================
     def _llm(self, messages):
         try:
-            response = self.client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=messages,
-                max_tokens=350,
-                temperature=0.1,
+            payload = {
+                "model": "llama-3.1-8b-instant",
+                "messages": messages,
+                "max_tokens": 350,
+                "temperature": 0.1,
+            }
+
+            resp = self.http_client.post(
+                GROQ_CHAT_URL,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
             )
-            return response.choices[0].message.content
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Debug – first 100 chars of response
+            print("🧠 LLM status:", resp.status_code)
+            print("🧠 LLM response preview:", str(data)[:200])
+
+            return data["choices"][0]["message"]["content"]
+
         except Exception as e:
+            # Debug log for Streamlit logs
+            print("❌ LLM ERROR:", e)
             return f"[LLM ERROR] {str(e)}"
-        
+
     def generate_insights(self, text):
         messages = [
             {
@@ -100,12 +123,11 @@ class InventoryAIAgent:
                 "content": (
                     "You are an expert analytics system. Provide clear, insightful, "
                     "actionable insights based only on the provided dataset summary."
-                )
+                ),
             },
-            {"role": "user", "content": text}
+            {"role": "user", "content": text},
         ]
         return self._llm(messages)
-    
 
     # ========================================================
     # ITEM EXTRACTION (supports multi-item + memory fallback)
@@ -135,9 +157,11 @@ class InventoryAIAgent:
 
         # Forecast
         if "forecast" in t or "predict" in t or "next" in t:
-            days_match = re.search(r"for\s+(\d+)\s*days", t) \
-                      or re.search(r"(\d+)\s*day", t) \
-                      or re.search(r"(\d+)\s*days", t)
+            days_match = (
+                re.search(r"for\s+(\d+)\s*days", t)
+                or re.search(r"(\d+)\s*day", t)
+                or re.search(r"(\d+)\s*days", t)
+            )
             days = int(days_match.group(1)) if days_match else 30
             return "forecast_item", {"items": self._extract_items(t), "days": days}
 
@@ -156,11 +180,10 @@ class InventoryAIAgent:
         # Risk report
         if "risk" in t or "status" in t:
             return "get_full_risk_report", {}
-        
+
         # Volatility / Stability / Fluctuations
         if any(x in t for x in ["volatility", "stable", "stability", "fluctuation", "variation"]):
             return "get_item_volatility", {"items": self._extract_items(t)}
-
 
         # No intent → fallback to LLM general chat
         return None, None
@@ -176,11 +199,6 @@ class InventoryAIAgent:
     # VISUALIZATION (Matplotlib → Base64 PNG)
     # ========================================================
     def _plot_forecast_chart(self, df_hist, df_fc, item_name):
-        """
-        df_hist → historical df
-        df_fc → forecast df (prophet + xgb blended)
-        """
-
         try:
             plt.figure(figsize=(8, 4))
             plt.plot(df_hist["date"], df_hist["quantity"], label="History", linewidth=2)
@@ -205,7 +223,6 @@ class InventoryAIAgent:
     # HIGH-LEVEL ASK METHOD
     # ========================================================
     def ask(self, user_input):
-
         self.memory.append({"role": "user", "content": user_input})
         self._compress_memory()
 
@@ -222,37 +239,39 @@ class InventoryAIAgent:
                 "content": (
                     "You are a helpful inventory & supply-chain assistant. "
                     "Be concise and practical."
-                )
+                ),
             }
         ] + self.memory
 
         reply = self._llm(messages)
         self.memory.append({"role": "assistant", "content": reply})
         return reply
-    
-# ========================================================
-#  Tool Execution & Advanced Logic
-# ========================================================
 
     # ========================================================
-    # NORMALIZE MULTI-ITEM BEHAVIOR
+    #  Tool Execution & Advanced Logic
     # ========================================================
+
     def _normalize_tool_params(self, tool_name, params):
+        single_item_tools = [
+            "forecast_item",
+            "get_reorder_report",
+            "clean_sales_data",
+            "get_item_volatility",
+        ]
 
-        single_item_tools = ["forecast_item", "get_reorder_report",
-                            "clean_sales_data", "get_item_volatility"]
-
-        # ❗ Only treat as multi-item if **2 or more** items are provided
+        # Only treat as multi-item if 2 or more items are provided
         if tool_name in single_item_tools and "items" in params:
             items = params["items"]
 
-            # 🟢 SINGLE ITEM → return normal params (NOT multi-item)
+            # SINGLE ITEM → return normal params
             if len(items) == 1:
-                return {"item_name": items[0], **{k: v for k, v in params.items() if k != "items"}}, False
+                return {
+                    "item_name": items[0],
+                    **{k: v for k, v in params.items() if k != "items"},
+                }, False
 
-            # 🟠 MULTI-ITEM MODE
-            safe_params = {k: v for k, v in params.items()
-                        if k not in ["items", "item_name"]}
+            # MULTI-ITEM MODE
+            safe_params = {k: v for k, v in params.items() if k not in ["items", "item_name"]}
 
             results = []
             for item in items:
@@ -264,12 +283,7 @@ class InventoryAIAgent:
 
         return params, False
 
-
-    # ========================================================
-    # EXECUTE TOOL (Single-item OR Multi-item)
-    # ========================================================
     def _run_tool(self, tool_name, params, user_input):
-
         print("🚀 TOOL TRIGGERED:", tool_name, "| params:", params)
 
         normalized, handled = self._normalize_tool_params(tool_name, params)
@@ -294,20 +308,25 @@ class InventoryAIAgent:
             for entry in safe_result:
                 item_name = list(entry.keys())[0]
                 item_data = entry[item_name]
-                small_summary.append({
-                    "item": item_name,
-                    "next_day": item_data.get("next_day"),
-                    "next_7_days": item_data.get("next_7_days"),
-                    "next_30_days": item_data.get("next_30_days"),
-                })
+                small_summary.append(
+                    {
+                        "item": item_name,
+                        "next_day": item_data.get("next_day"),
+                        "next_7_days": item_data.get("next_7_days"),
+                        "next_30_days": item_data.get("next_30_days"),
+                    }
+                )
 
             messages = [
-                {"role": "system",
-                "content": "You are an expert inventory assistant. "
-                            "Explain results clearly in simple terms."},
-                {"role": "assistant",
-                "content": f"TOOL_RESULT:\n{json.dumps(small_summary, indent=2)}"},
-                {"role": "user", "content": "Explain this for a beginner."}
+                {
+                    "role": "system",
+                    "content": "You are an expert inventory assistant. Explain results clearly in simple terms.",
+                },
+                {
+                    "role": "assistant",
+                    "content": f"TOOL_RESULT:\n{json.dumps(small_summary, indent=2)}",
+                },
+                {"role": "user", "content": "Explain this for a beginner."},
             ]
 
             explanation = self._llm(messages)
@@ -315,14 +334,11 @@ class InventoryAIAgent:
             return {
                 "type": "tool_result",
                 "explanation": explanation,
-                "chart": chart_b64
+                "chart": chart_b64,
             }
 
-
-
-        #
         # ----------------------------------------------------
-        # Normal single item execution  (SAFE STRUCTURED OUTPUT)
+        # Normal single item execution
         # ----------------------------------------------------
         tool_fn = getattr(self.tools, tool_name)
         result = tool_fn(**normalized)
@@ -333,7 +349,7 @@ class InventoryAIAgent:
             return {
                 "type": "tool_result",
                 "explanation": explanation,
-                "chart": None
+                "chart": None,
             }
 
         # Save last used item name
@@ -346,7 +362,7 @@ class InventoryAIAgent:
             return {
                 "type": "tool_result",
                 "explanation": explanation,
-                "chart": None
+                "chart": None,
             }
 
         # Convert data safely (history + forecast)
@@ -355,16 +371,12 @@ class InventoryAIAgent:
         # CHART HANDLING — use the chart already generated by AgentTools
         chart_b64 = safe_result.get("chart_data", None)
 
-        # DEBUG
         if chart_b64:
             print("🔍 DEBUG — Using chart from AgentTools (len:", len(chart_b64), ")")
         else:
             print("🔍 DEBUG — No chart found in AgentTools result")
 
-        
-
-        
-        # Build a small summary for LLM (DO NOT include full forecast or chart)
+        # Build a small summary for LLM
         summary_for_llm = {
             "item_name": safe_result.get("item_name"),
             "next_day": safe_result.get("next_day"),
@@ -378,28 +390,20 @@ class InventoryAIAgent:
                 "content": (
                     "You are an expert inventory assistant. "
                     "Explain the results clearly in simple terms."
-                )
+                ),
             },
-            {
-                "role": "assistant",
-                "content": f"RESULT:\n{json.dumps(summary_for_llm, indent=2)}"
-            },
-            {"role": "user", "content": "Explain this for a beginner."}
+            {"role": "assistant", "content": f"RESULT:\n{json.dumps(summary_for_llm, indent=2)}"},
+            {"role": "user", "content": "Explain this for a beginner."},
         ]
-
-        
 
         explanation = self._llm(messages)
 
-        # ----------------------------------------------
-        # Return structured output to dashboard
-        # ----------------------------------------------
         return {
             "type": "tool_result",
             "explanation": explanation,
-            "chart": chart_b64
+            "chart": chart_b64,
         }
-        
+
     # ========================================================
     # VOLATILITY FORMATTING HELPER
     # ========================================================
@@ -422,7 +426,6 @@ class InventoryAIAgent:
 **Interpretation:**  
 Items with higher volatility have inconsistent demand. Consider monitoring them closely and avoid aggressive overstocking unless supported by trends.
         """
-
 
     # ========================================================
     # TREND DETECTION (Last 14 days)
@@ -456,7 +459,6 @@ Items with higher volatility have inconsistent demand. Consider monitoring them 
 
         return spikes[["date", "quantity"]].to_dict(orient="records")
 
-    
     # ========================================================
     # ERROR EXPLANATION (LLM)
     # ========================================================
@@ -466,10 +468,10 @@ Items with higher volatility have inconsistent demand. Consider monitoring them 
         messages = [
             {
                 "role": "system",
-                "content": "Explain errors politely and give steps to fix it."
+                "content": "Explain errors politely and give steps to fix it.",
             },
             {"role": "assistant", "content": f"TOOL_ERROR:\n{msg}"},
-            {"role": "user", "content": "Help me fix it."}
+            {"role": "user", "content": "Help me fix it."},
         ]
 
         reply = self._llm(messages)
