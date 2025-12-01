@@ -1,0 +1,11 @@
+streamlit==1.36.0
+pandas
+numpy
+plotly
+prophet
+xgboost
+scikit-learn
+fpdf2
+openpyxl
+python-dateutil
+joblib

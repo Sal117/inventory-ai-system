@@ -1,0 +1,11 @@
+item,current_stock,category,supplier,shelf_life_days,unit_cost
+Milk,369,Protein,FreshFarm,10,4.46
+Bread,332,Grocery,Almarai,29,2.38
+Eggs,734,Bakery,SunFoods,15,4.97
+Rice,750,Bakery,GoldenSupply,6,12.82
+Chicken,723,Bakery,GoldenSupply,17,10.02
+Apples,312,Dairy,Almarai,12,5.38
+Bananas,899,Fruit,FreshFarm,20,3.39
+Juice,613,Bakery,Almarai,6,6.44
+Cereal,771,Fruit,Almarai,26,14.18
+Cheese,683,Bakery,GoldenSupply,21,12.02

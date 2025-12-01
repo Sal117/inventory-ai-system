@@ -1,0 +1,11 @@
+item,category,unit_cost,supplier,avg_delay_days,shelf_life_days
+Milk,,,FreshCo,,
+Bread,Bakery,4.7770411952754035,Golden Farms,1.0,5.0
+Eggs,Dairy,4.971784520767879,DeliPro,6.0,21.0
+Rice,,,FoodMaster,,
+Chicken,Meat,1.639106373468504,FreshCo,2.0,5.0
+Apples,Fruits,3.7820123773430026,FreshCo,1.0,21.0
+Bananas,Fruits,3.223949578954348,Golden Farms,5.0,24.0
+Juice,Beverages,2.311077935851048,FoodMaster,6.0,11.0
+Cereal,Pantry,2.1175380086400466,FoodMaster,2.0,28.0
+Cheese,Dairy,3.310909248940425,Golden Farms,6.0,27.0
