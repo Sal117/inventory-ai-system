@@ -21,7 +21,7 @@ requests
 pydantic==1.10.14
 tqdm
 
-groq==0.5.0
+groq==0.6.0
 pyyaml
 python-dotenv
 rapidfuzz
