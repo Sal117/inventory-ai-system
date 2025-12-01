@@ -24,7 +24,11 @@ from src.ml.ml_predictor import MLPredictor
 # Load Groq API key safely (Streamlit Cloud or local fallback)
 load_dotenv()
 
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+if "GROQ_API_KEY" in st.secrets:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+else:
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
 
 
 
