@@ -13,18 +13,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from dotenv import load_dotenv
+import streamlit as st
 from groq import Groq
 
 from src.agent_tools import AgentTools
 from src.ml.ml_predictor import MLPredictor
 
 
-# ------------------------------------------------------------
-# Load API key from project root
-# ------------------------------------------------------------
-env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
-load_dotenv(env_path)
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+# Load Groq API key safely (Streamlit Cloud or local fallback)
+if "GROQ_API_KEY" in st.secrets:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+else:
+    load_dotenv()
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 
 class InventoryAIAgent:
