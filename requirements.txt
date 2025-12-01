@@ -1,11 +1,27 @@
 streamlit==1.36.0
-pandas
-numpy
-plotly
-prophet
-xgboost
-scikit-learn
-fpdf2
+pandas==2.2.2
+numpy==1.26.4
+plotly==5.22.0
+
+prophet==1.1.5
+pystan==2.19.1.1          # Prophet requires PyStan
+
+xgboost==2.0.3
+scikit-learn==1.4.1
+
 openpyxl
+fpdf2
 python-dateutil
 joblib
+requests
+pydantic==1.10.14
+tqdm
+
+matplotlib
+seaborn
+
+# For AI Assistant (Groq)
+groq==0.5.0
+
+# Data serialization, cleaning helpers
+pyyaml
