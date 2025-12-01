@@ -22,11 +22,10 @@ from src.ml.ml_predictor import MLPredictor
 
 
 # Load Groq API key safely (Streamlit Cloud or local fallback)
-if "GROQ_API_KEY" in st.secrets:
-    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-else:
-    load_dotenv()
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+load_dotenv()
+
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+
 
 
 class InventoryAIAgent:
