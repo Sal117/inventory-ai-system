@@ -24,3 +24,5 @@ tqdm
 groq==0.5.0
 pyyaml
 python-dotenv
+rapidfuzz
+
