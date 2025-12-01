@@ -45,8 +45,9 @@ class InventoryAIAgent:
 
     def __init__(self, df_sales, inventory_df):
         if not GROQ_API_KEY:
-            raise ValueError("GROQ_API_KEY missing in .env")
-
+            st.error("❌ GROQ_API_KEY is missing. Please add it in Streamlit Secrets.")
+            raise ValueError("GROQ_API_KEY missing.")
+            
         self.client = Groq(api_key=GROQ_API_KEY)
 
         # ML + classical logic tools
