@@ -12,9 +12,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-import httpx
-
-
 import streamlit as st
 from groq import Groq
 
@@ -49,13 +46,9 @@ class InventoryAIAgent:
         if not GROQ_API_KEY:
             st.error("❌ GROQ_API_KEY is missing. Please add it in Streamlit Secrets.")
             raise ValueError("GROQ_API_KEY missing.")
-            
-        http_client = httpx.Client(proxies=None)
+        
+        self.client = Groq(api_key=GROQ_API_KEY)
 
-        self.client = Groq(
-            api_key=GROQ_API_KEY,
-            http_client=http_client
-        )
 
         # ML + classical logic tools
         self.tools = AgentTools(df_sales, inventory_df)
