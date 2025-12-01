@@ -1,4 +1,5 @@
-
+import sys, os
+sys.path.append(os.path.abspath("src"))
 import streamlit as st
 import pandas as pd
 import plotly.express as px
