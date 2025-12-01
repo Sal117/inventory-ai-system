@@ -12,17 +12,15 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from dotenv import load_dotenv
+import httpx
+
+
 import streamlit as st
 from groq import Groq
 
 from src.agent_tools import AgentTools
 from src.ml.ml_predictor import MLPredictor
 
-
-
-# Load Groq API key safely (Streamlit Cloud or local fallback)
-load_dotenv()
 
 if "GROQ_API_KEY" in st.secrets:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
@@ -52,7 +50,12 @@ class InventoryAIAgent:
             st.error("❌ GROQ_API_KEY is missing. Please add it in Streamlit Secrets.")
             raise ValueError("GROQ_API_KEY missing.")
             
-        self.client = Groq(api_key=GROQ_API_KEY)
+        http_client = httpx.Client(proxies=None)
+
+        self.client = Groq(
+            api_key=GROQ_API_KEY,
+            http_client=http_client
+        )
 
         # ML + classical logic tools
         self.tools = AgentTools(df_sales, inventory_df)
