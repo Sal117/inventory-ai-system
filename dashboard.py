@@ -433,6 +433,20 @@ elif page == "📈 Forecasting":
 
     df_item = df_sales[df_sales["item"] == item].copy()
 
+    inventory_df = ds.get("inventory")
+
+    # Merge inventory into df_item
+    if inventory_df is not None and item in inventory_df["item"].values:
+        inv = inventory_df[inventory_df["item"] == item].iloc[0]
+        df_item["ending_stock"] = inv.get("current_stock", 0)
+        df_item["avg_delay_days"] = inv.get("avg_delay_days", 0)
+        df_item["lift_factor"] = inv.get("lift_factor", 1.0)
+    else:
+        df_item["ending_stock"] = 0
+        df_item["avg_delay_days"] = 0
+        df_item["lift_factor"] = 1.0
+
+
     if df_item.empty:
         st.error("❌ No data found for this item.")
         st.stop()
@@ -550,7 +564,7 @@ elif page == "📈 Forecasting":
 
     # Depletion estimate
     if daily_avg_fc > 0:
-        depletion_days = ending_stock / daily_avg_fc
+        float(ending_stock) / max(daily_avg_fc, 0.001)
     else:
         depletion_days = 999  # infinite
 
@@ -1288,32 +1302,9 @@ elif page == "🤖 AI Assistant":
 
             st.markdown(" ")
 
-    # ====================================================
-    # SUGGESTED PROMPTS
-    # ====================================================
-    st.write("### 💡 Suggested Questions")
+    
 
-    colA, colB = st.columns(2)
 
-    with colA:
-        if st.button("📈 Forecast Apples (14 days)"):
-            st.session_state.ai_chat_history.append(("user", "forecast apples for 14 days"))
-            st.rerun()
-
-        if st.button("📊 Volatility of Juice"):
-            st.session_state.ai_chat_history.append(("user", "show volatility for juice"))
-            st.rerun()
-
-    with colB:
-        if st.button("⚠ Risk Level: Bread"):
-            st.session_state.ai_chat_history.append(("user", "what is the risk level of bread"))
-            st.rerun()
-
-        if st.button("🔁 Should we reorder Eggs?"):
-            st.session_state.ai_chat_history.append(("user", "should we reorder eggs"))
-            st.rerun()
-
-#
 # ============================================================
 # 7. EXPORT REPORTS (Enterprise Edition – Synced with Final Exporter)
 # ============================================================
