@@ -438,14 +438,16 @@ elif page == "📈 Forecasting":
     # Merge inventory into df_item
     if inventory_df is not None and item in inventory_df["item"].values:
         inv = inventory_df[inventory_df["item"] == item].iloc[0]
-        df_item["ending_stock"] = inv.get("current_stock", 0)
-        df_item["avg_delay_days"] = inv.get("avg_delay_days", 0)
-        df_item["lift_factor"] = inv.get("lift_factor", 1.0)
+        df_item["ending_stock"] = inv_row.get("current_stock", 0)
+        df_item["avg_delay_days"] = inv_row.get("avg_delay_days", 0)
+        df_item["lift_factor"] = inv_row.get("lift_factor", 1.0)
+        df_item["reorder_point"] = inv_row.get("reorder_point", None)
     else:
+        # Default fallback values
         df_item["ending_stock"] = 0
         df_item["avg_delay_days"] = 0
         df_item["lift_factor"] = 1.0
-
+        df_item["reorder_point"] = None
 
     if df_item.empty:
         st.error("❌ No data found for this item.")
